@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>AI Data Analyst Agent</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
+<style>
+  :root { color-scheme: light; }
+  body { font-family: -apple-system, Segoe UI, Roboto, sans-serif; max-width: 780px; margin: 40px auto; padding: 0 16px; background: #f7f7f8; }
+  h1 { font-size: 1.4rem; }
+  .badge { display: inline-block; font-size: 0.75rem; padding: 2px 8px; border-radius: 10px; background: #e6e6e6; margin-left: 8px; vertical-align: middle; }
+  #api-url { font-size: 0.8rem; color: #666; }
+  form { display: flex; gap: 8px; margin: 16px 0; }
+  input[type=text] { flex: 1; padding: 10px 12px; border: 1px solid #ccc; border-radius: 8px; font-size: 1rem; }
+  button { padding: 10px 16px; border: none; border-radius: 8px; background: #2b6cb0; color: white; font-size: 1rem; cursor: pointer; }
+  button:disabled { opacity: 0.6; cursor: default; }
+  .card { background: white; border-radius: 10px; padding: 16px; margin-bottom: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+  .sql { font-family: monospace; font-size: 0.85rem; white-space: pre-wrap; background: #f0f0f0; padding: 8px; border-radius: 6px; }
+  table { width: 100%; border-collapse: collapse; font-size: 0.85rem; margin-top: 8px; }
+  th, td { text-align: left; padding: 4px 8px; border-bottom: 1px solid #eee; }
+  .error { color: #b00020; }
+  .examples button { background: #eee; color: #333; font-size: 0.8rem; padding: 6px 10px; margin: 2px; }
+</style>
+</head>
+<body>
+  <h1>AI Data Analyst Agent <span id="mode" class="badge">checking...</span></h1>
+  <p id="api-url">Talking to <code id="api-base">http://localhost:8000</code> —
+    change with <code>?api=http://your-host:8000</code> in the URL.</p>
+
+  <div class="examples">
+    <button onclick="ask('Which counties have the largest gaps in reported service coverage?')">Largest coverage gaps</button>
+    <button onclick="ask('Top 5 counties by water access in 2024')">Top 5 by water access</button>
+    <button onclick="ask('How does health facility coverage compare across regions?')">Compare regions</button>
+  </div>
+
+  <form id="form">
+    <input id="question" type="text" placeholder="Ask about county service coverage..." autocomplete="off" />
+    <button type="submit">Ask</button>
+  </form>
+
+  <div id="results"></div>
+
+  <script>
+    const params = new URLSearchParams(window.location.search);
+    const API_BASE = params.get('api') || 'http://localhost:8000';
+    document.getElementById('api-base').textContent = API_BASE;
+
+    fetch(API_BASE + '/health').then(r => r.json()).then(d => {
+      document.getElementById('mode').textContent = d.demo_mode ? 'DEMO_MODE' : 'LLM_MODE';
+    }).catch(() => { document.getElementById('mode').textContent = 'API unreachable'; });
+
+    let chartInstance = null;
+
+    async function ask(question) {
+      document.getElementById('question').value = question;
+      const resultsEl = document.getElementById('results');
+      resultsEl.innerHTML = '<div class="card">Thinking…</div>';
+
+      try {
+        const res = await fetch(API_BASE + '/ask', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ question })
+        });
+        const data = await res.json();
+        render(data);
+      } catch (err) {
+        resultsEl.innerHTML = `<div class="card error">Request failed: ${err}. Is the API running at ${API_BASE}?</div>`;
+      }
+    }
+
+    function render(data) {
+      const resultsEl = document.getElementById('results');
+      if (data.error) {
+        resultsEl.innerHTML = `<div class="card error"><strong>Error:</strong> ${data.error}<div class="sql">${data.sql || ''}</div></div>`;
+        return;
+      }
+
+      let rowsHtml = '';
+      if (data.rows && data.rows.length) {
+        const cols = data.columns;
+        rowsHtml = '<table><thead><tr>' + cols.map(c => `<th>${c}</th>`).join('') + '</tr></thead><tbody>' +
+          data.rows.map(r => '<tr>' + cols.map(c => `<td>${r[c]}</td>`).join('') + '</tr>').join('') +
+          '</tbody></table>';
+      }
+
+      resultsEl.innerHTML = `
+        <div class="card">
+          <strong>${data.question}</strong>
+          <p>${data.summary}</p>
+          <details><summary>SQL used</summary><div class="sql">${data.sql}</div></details>
+          ${rowsHtml}
+          ${data.chart ? '<canvas id="chart" height="180"></canvas>' : ''}
+        </div>`;
+
+      if (data.chart) {
+        if (chartInstance) chartInstance.destroy();
+        chartInstance = new Chart(document.getElementById('chart'), {
+          type: 'bar',
+          data: {
+            labels: data.chart.labels,
+            datasets: [{ label: data.chart.value_field, data: data.chart.values, backgroundColor: '#2b6cb0' }]
+          },
+          options: { responsive: true, plugins: { legend: { display: false } } }
+        });
+      }
+    }
+
+    document.getElementById('form').addEventListener('submit', (e) => {
+      e.preventDefault();
+      const q = document.getElementById('question').value.trim();
+      if (q) ask(q);
+    });
+  </script>
+</body>
+</html>
