@@ -33,11 +33,9 @@ The agent has two modes:
   question to one of several parameterized, pre-validated SQL templates, and a
   templated summarizer describes the results using pandas statistics. Fully
   functional, deterministic, zero cost.
-- **LLM_MODE (set `ANTHROPIC_API_KEY`):** the same pipeline instead asks Claude to
-  write the SQL and the explanation, still passing through the exact same SQL guard.
+- **LLM_MODE (set `ANTHROPIC_API_KEY`):** the same pipeline write the SQL and the explanation, still passing through the exact same SQL guard.
 
-This means the project is honest about being an *agent* (LLM writes SQL + explains
-findings) while still being trivially runnable for anyone reviewing your GitHub.
+The architecture supports both deterministic rule-based planning and LLM-driven planning while enforcing the same SQL safety layer.
 
 ## Dataset
 
